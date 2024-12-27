@@ -1,3 +1,4 @@
+#导入语句用于引入Ryu控制器的基本模块，包括事件、处理程序和OpenFlow协议v1.3。packet模块用于处理网络数据包，ethernet、arp、icmp是具体的数据包类型类。
 from ryu.base import app_manager
 from ryu.controller import ofp_event
 from ryu.controller.handler import MAIN_DISPATCHER, CONFIG_DISPATCHER, set_ev_cls
@@ -10,10 +11,10 @@ class RoundRobinLB(app_manager.RyuApp):
 
     def __init__(self, *args, **kwargs):
         super(RoundRobinLB, self).__init__(*args, **kwargs)
-        self.servers = ['10.0.0.2', '10.0.0.3', '10.0.0.4']
+        self.servers = ['10.0.0.2', '10.0.0.3', '10.0.0.4']    #定义了后端服务器的IP地址列表self.servers和用于轮询选择服务器的索引self.current_server
         self.current_server = 0
 
-    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)
+    @set_ev_cls(ofp_event.EventOFPSwitchFeatures, CONFIG_DISPATCHER)    #当交换机与控制器连接时触发EventOFPSwitchFeatures事件。datapath对象代表与交换机通信的通道。默认安装一个流表项，将所有未匹配的数据包发送到控制器进行处理，这是一个table-miss流表项。
     def switch_features_handler(self, ev):
         datapath = ev.msg.datapath
         ofproto = datapath.ofproto
@@ -22,7 +23,7 @@ class RoundRobinLB(app_manager.RyuApp):
         actions = [parser.OFPActionOutput(ofproto.OFPP_CONTROLLER, ofproto.OFPCML_NO_BUFFER)]
         self.add_flow(datapath, 0, match, actions)
 
-    def add_flow(self, datapath, priority, match, actions, buffer_id=None):
+    def add_flow(self, datapath, priority, match, actions, buffer_id=None):   #该方法用于向交换机添加流表项。priority设定流表项的优先级，match是匹配条件，actions是要执行的动作。创建并发送OFPFlowMod消息以更新交换机的流表。
         ofproto = datapath.ofproto
         parser = datapath.ofproto_parser
         inst = [parser.OFPInstructionActions(ofproto.OFPIT_APPLY_ACTIONS, actions)]
@@ -36,6 +37,12 @@ class RoundRobinLB(app_manager.RyuApp):
         datapath.send_msg(mod)
 
     @set_ev_cls(ofp_event.EventOFPPacketIn, MAIN_DISPATCHER)
+    '''
+#EventOFPPacketIn事件在数据包到达但没有匹配到流表项时被触发。
+#忽略LLDP（链路层发现协议）包，因为它们用于交换拓扑信息。
+#对IP数据包，如果是ICMP类型（例如Ping），使用轮询算法选择下一个后端服务器，并修改目的IP为选择的服务器。
+#对ARP数据包，简单地用洪泛（flood）方式发送到所有端口，以便解决ARP请求。
+    '''
     def _packet_in_handler(self, ev):
         msg = ev.msg
         datapath = msg.datapath
